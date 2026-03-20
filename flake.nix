@@ -13,10 +13,17 @@
         pkgs = import nixpkgs { inherit system; };
         craneLib = crane.mkLib pkgs;
 
-        src = craneLib.cleanCargoSource ./.;
+        src = pkgs.lib.cleanSourceWith {
+          src = ./.;
+          filter = path: type:
+            (pkgs.lib.hasSuffix ".proto" path) ||
+            (pkgs.lib.hasInfix "/proto/" path) ||
+            (craneLib.filterCargoSources path type);
+        };
 
         commonArgs = {
           inherit src;
+          nativeBuildInputs = [ pkgs.protobuf ];
           buildInputs = with pkgs; [ openssl ];
         };
 
@@ -27,7 +34,7 @@
         pylon = craneLib.buildPackage (commonArgs // {
           inherit cargoArtifacts;
           pname = "pylon";
-          doCheck = false;
+          doTest = false;
         });
 
       in
