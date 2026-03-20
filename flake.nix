@@ -47,7 +47,11 @@
         devShells.default = craneLib.devShell {
           inherit src;
           inputsFrom = [ pylon ];
-          packages = with pkgs; [ rust-analyzer cargo-watch ];
+          packages = with pkgs; [ rust-analyzer cargo-watch cargo-llvm-cov ];
+          shellHook = ''
+            export LLVM_COV="${pkgs.llvmPackages_19.llvm}/bin/llvm-cov"
+            export LLVM_PROFDATA="${pkgs.llvmPackages_19.llvm}/bin/llvm-profdata"
+          '';
         };
       }
     );

@@ -23,7 +23,7 @@ pub static JWT_SECRET: Lazy<Vec<u8>> = Lazy::new(|| {
         .into_bytes()
 });
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub iss: String,
     pub sub: String,
@@ -32,7 +32,7 @@ pub struct Claims {
     pub exp: i64,
 }
 
-fn extract_token_from_header(headers: &axum::http::HeaderMap) -> Option<String> {
+pub fn extract_token_from_header(headers: &axum::http::HeaderMap) -> Option<String> {
     headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -76,7 +76,7 @@ pub struct ChatRequest {
     pub stream: bool,
 }
 
-fn default_max_tokens() -> u32 { 4096 }
+pub fn default_max_tokens() -> u32 { 4096 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
@@ -234,4 +234,255 @@ async fn proxy_request(
 
     let text = response.text().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{HeaderMap, HeaderValue, header};
+
+    #[test]
+    fn test_jwt_secret_initialization() {
+        let secret = JWT_SECRET.clone();
+        assert!(!secret.is_empty());
+    }
+
+    #[test]
+    fn test_claims_debug() {
+        let claims = Claims {
+            iss: "test".to_string(),
+            sub: "user".to_string(),
+            role: "admin".to_string(),
+            iat: 0,
+            exp: 0,
+        };
+        let debug_str = format!("{:?}", claims);
+        assert!(debug_str.contains("Claims"));
+    }
+
+    #[test]
+    fn test_extract_token_with_bearer() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer test-token-123"),
+        );
+        
+        let token = extract_token_from_header(&headers);
+        assert_eq!(token, Some("test-token-123".to_string()));
+    }
+
+    #[test]
+    fn test_extract_token_without_auth_header() {
+        let headers = HeaderMap::new();
+        let token = extract_token_from_header(&headers);
+        assert!(token.is_none());
+    }
+
+    #[test]
+    fn test_extract_token_with_wrong_scheme() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Basic dXNlcjpwYXNz"),
+        );
+        
+        let token = extract_token_from_header(&headers);
+        assert!(token.is_none());
+    }
+
+    #[test]
+    fn test_extract_token_with_empty_bearer() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer "),
+        );
+        
+        let token = extract_token_from_header(&headers);
+        assert_eq!(token, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_chat_request_default_max_tokens() {
+        let json = r#"{"model":"test","messages":[]}"#;
+        let req: ChatRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.max_tokens, 4096);
+        assert_eq!(req.temperature, 0.0);
+        assert!(!req.stream);
+    }
+
+    #[test]
+    fn test_message_serde() {
+        let msg = Message {
+            role: "user".to_string(),
+            content: "Hello, world!".to_string(),
+        };
+        
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: Message = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(parsed.role, "user");
+        assert_eq!(parsed.content, "Hello, world!");
+    }
+
+    #[test]
+    fn test_chat_request_serde() {
+        let req = ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![
+                Message { role: "system".to_string(), content: "You are helpful".to_string() },
+                Message { role: "user".to_string(), content: "Hi".to_string() },
+            ],
+            temperature: 0.7,
+            max_tokens: 1000,
+            stream: true,
+        };
+        
+        let json = serde_json::to_string(&req).unwrap();
+        let parsed: ChatRequest = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(parsed.model, "gpt-4");
+        assert_eq!(parsed.messages.len(), 2);
+        assert_eq!(parsed.temperature, 0.7);
+        assert_eq!(parsed.max_tokens, 1000);
+        assert!(parsed.stream);
+    }
+
+    #[test]
+    fn test_chat_response_serde() {
+        let resp = ChatResponse {
+            id: "chat-123".to_string(),
+            object: "chat.completion".to_string(),
+            created: 1234567890,
+            model: "gpt-4".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                message: Message {
+                    role: "assistant".to_string(),
+                    content: "Hello!".to_string(),
+                },
+                finish_reason: Some("stop".to_string()),
+            }],
+        };
+        
+        let json = serde_json::to_string(&resp).unwrap();
+        let parsed: ChatResponse = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(parsed.id, "chat-123");
+        assert_eq!(parsed.choices.len(), 1);
+    }
+
+    #[test]
+    fn test_model_info_serde() {
+        let info = ModelInfo {
+            id: "llama3.2".to_string(),
+            object: "model".to_string(),
+            created: 1700000000,
+            owned_by: "openzerg".to_string(),
+        };
+        
+        let json = serde_json::to_string(&info).unwrap();
+        let parsed: ModelInfo = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(parsed.id, "llama3.2");
+        assert_eq!(parsed.owned_by, "openzerg");
+    }
+
+    #[test]
+    fn test_model_list_serde() {
+        let list = ModelList {
+            object: "list".to_string(),
+            data: vec![
+                ModelInfo {
+                    id: "model-1".to_string(),
+                    object: "model".to_string(),
+                    created: 1700000000,
+                    owned_by: "openzerg".to_string(),
+                },
+                ModelInfo {
+                    id: "model-2".to_string(),
+                    object: "model".to_string(),
+                    created: 1700000000,
+                    owned_by: "openzerg".to_string(),
+                },
+            ],
+        };
+        
+        let json = serde_json::to_string(&list).unwrap();
+        let parsed: ModelList = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(parsed.data.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_app_state() {
+        let state = AppState {
+            upstream: "http://localhost:11434".to_string(),
+            client: Client::new(),
+            models: RwLock::new(vec!["test".to_string()]),
+        };
+        
+        let models = state.models.read().await;
+        assert_eq!(models.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_app_state_models_modification() {
+        let state = AppState {
+            upstream: "http://localhost:11434".to_string(),
+            client: Client::new(),
+            models: RwLock::new(vec!["model-1".to_string()]),
+        };
+        
+        {
+            let mut models = state.models.write().await;
+            models.push("model-2".to_string());
+        }
+        
+        let models = state.models.read().await;
+        assert_eq!(models.len(), 2);
+    }
+
+    #[test]
+    fn test_choice_serde() {
+        let choice = Choice {
+            index: 0,
+            message: Message {
+                role: "assistant".to_string(),
+                content: "Response".to_string(),
+            },
+            finish_reason: Some("stop".to_string()),
+        };
+        
+        let json = serde_json::to_string(&choice).unwrap();
+        let parsed: Choice = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(parsed.finish_reason, Some("stop".to_string()));
+    }
+
+    #[test]
+    fn test_choice_null_finish_reason() {
+        let json = r#"{"index":0,"message":{"role":"assistant","content":"test"},"finish_reason":null}"#;
+        let choice: Choice = serde_json::from_str(json).unwrap();
+        assert!(choice.finish_reason.is_none());
+    }
+
+    #[test]
+    fn test_claims_serde() {
+        let claims = Claims {
+            iss: "test-issuer".to_string(),
+            sub: "test-subject".to_string(),
+            role: "admin".to_string(),
+            iat: 1000,
+            exp: 2000,
+        };
+        
+        let json = serde_json::to_string(&claims).unwrap();
+        let parsed: Claims = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(parsed.iss, "test-issuer");
+        assert_eq!(parsed.sub, "test-subject");
+        assert_eq!(parsed.role, "admin");
+    }
 }
