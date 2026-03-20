@@ -1,0 +1,112 @@
+{% extends "layout.html" %}
+
+{% block title %}Logs - Pylon{% endblock %}
+
+{% block content %}
+<h1>Request Logs</h1>
+
+<div class="card">
+    <form method="GET" action="/ui/logs">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div class="form-group">
+                <label for="user_id">User ID</label>
+                <input type="text" id="user_id" name="user_id" value="{{ filter_user_id }}">
+            </div>
+            <div class="form-group">
+                <label for="proxy_id">Proxy ID</label>
+                <input type="text" id="proxy_id" name="proxy_id" value="{{ filter_proxy_id }}">
+            </div>
+            <div class="form-group">
+                <label for="source_model">Source Model</label>
+                <input type="text" id="source_model" name="source_model" value="{{ filter_source_model }}">
+            </div>
+            <div class="form-group">
+                <label for="is_success">Status</label>
+                <select id="is_success" name="is_success">
+                    <option value="">All</option>
+                    <option value="true" {% if filter_is_success == "true" %}selected{% endif %}>Success</option>
+                    <option value="false" {% if filter_is_success == "false" %}selected{% endif %}>Failed</option>
+                </select>
+            </div>
+        </div>
+        <div style="margin-top: 1rem;">
+            <button type="submit" class="btn btn-primary">Filter</button>
+            <a href="/ui/logs" class="btn btn-secondary">Clear</a>
+        </div>
+    </form>
+</div>
+
+{% if logs.is_empty() %}
+<div class="card">
+    <p>No logs found.</p>
+</div>
+{% else %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Model</th>
+                <th>Duration</th>
+                <th>Tokens</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.created_at }}</td>
+                <td>{{ log.user_id }}</td>
+                <td><code>{{ log.source_model }}</code></td>
+                <td>{{ log.duration_ms.unwrap_or(0) }}ms</td>
+                <td>{{ log.request_input_tokens.unwrap_or(0) }}/{{ log.response_output_tokens.unwrap_or(0) }}</td>
+                <td>
+                    {% if log.is_success %}
+                    <span class="badge badge-success">OK</span>
+                    {% else %}
+                    <span class="badge badge-error">Error</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-secondary" onclick="toggleDetails({{ log.id }})">Details</button>
+                </td>
+            </tr>
+            <tr id="details-{{ log.id }}" style="display: none;">
+                <td colspan="7">
+                    <div style="padding: 1rem;">
+                        <h4>Request</h4>
+                        {% if let Some(body) = log.request_body %}
+                        <pre>{{ body }}</pre>
+                        {% endif %}
+                        
+                        <h4 style="margin-top: 1rem;">Response</h4>
+                        {% if let Some(body) = log.response_body %}
+                        <pre style="max-height: 300px; overflow-y: auto;">{{ body }}</pre>
+                        {% endif %}
+                        
+                        {% if let Some(err) = log.error_message %}
+                        <h4 style="margin-top: 1rem;">Error</h4>
+                        <pre style="color: red;">{{ err }}</pre>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function toggleDetails(id) {
+    const row = document.getElementById('details-' + id);
+    if (row.style.display === 'none') {
+        row.style.display = 'table-row';
+    } else {
+        row.style.display = 'none';
+    }
+}
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+
+{% block title %}Login - Pylon{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-form">
+        <h2>Login to Pylon</h2>
+        {% if let Some(error) = error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/ui/login">
+            <div class="form-group">
+                <label for="token">Admin Token</label>
+                <input type="password" id="token" name="token" required placeholder="Enter your admin token">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

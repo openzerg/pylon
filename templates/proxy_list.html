@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+
+{% block title %}Proxies - Pylon{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+    <h1>Proxies</h1>
+    <a href="/ui/proxies/new" class="btn btn-primary">New Proxy</a>
+</div>
+
+{% if proxies.is_empty() %}
+<div class="card">
+    <p>No proxies configured. <a href="/ui/proxies/new">Create your first proxy</a>.</p>
+</div>
+{% else %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Source Model</th>
+                <th>Target Model</th>
+                <th>Upstream</th>
+                <th>Features</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for proxy in proxies %}
+            <tr>
+                <td><code>{{ proxy.id }}</code></td>
+                <td><code>{{ proxy.source_model }}</code></td>
+                <td><code>{{ proxy.target_model }}</code></td>
+                <td>{{ proxy.upstream }}</td>
+                <td>
+                    {% if proxy.support_streaming %}<span class="badge badge-success">Stream</span>{% endif %}
+                    {% if proxy.support_tools %}<span class="badge badge-success">Tools</span>{% endif %}
+                    {% if proxy.support_vision %}<span class="badge badge-success">Vision</span>{% endif %}
+                </td>
+                <td>
+                    <a href="/ui/proxies/{{ proxy.id }}" class="btn btn-secondary">Edit</a>
+                    <form method="POST" action="/ui/proxies/{{ proxy.id }}/delete" style="display: inline;">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this proxy?')">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

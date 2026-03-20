@@ -1,0 +1,74 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - Pylon{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ stats.total_proxies }}</h3>
+        <p>Total Proxies</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ stats.total_requests_today }}</h3>
+        <p>Requests Today</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ stats.successful_requests_today }}</h3>
+        <p>Successful Today</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ success_rate }}%</h3>
+        <p>Success Rate</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ avg_duration }}ms</h3>
+        <p>Avg Duration</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ stats.total_input_tokens }}</h3>
+        <p>Input Tokens</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ stats.total_output_tokens }}</h3>
+        <p>Output Tokens</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Quick Actions</h2>
+    <a href="/ui/proxies/new" class="btn btn-primary">Create Proxy</a>
+    <a href="/ui/logs" class="btn btn-secondary">View Logs</a>
+</div>
+
+<div class="card">
+    <h2>Recent Proxies</h2>
+    {% if proxies.is_empty() %}
+    <p>No proxies configured yet. <a href="/ui/proxies/new">Create one</a>.</p>
+    {% else %}
+    <table>
+        <thead>
+            <tr>
+                <th>Source Model</th>
+                <th>Target Model</th>
+                <th>Upstream</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for proxy in proxies %}
+            <tr>
+                <td><code>{{ proxy.source_model }}</code></td>
+                <td><code>{{ proxy.target_model }}</code></td>
+                <td>{{ proxy.upstream }}</td>
+                <td>
+                    <a href="/ui/proxies/{{ proxy.id }}" class="btn btn-secondary">Edit</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+{% endblock %}

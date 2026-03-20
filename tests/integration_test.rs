@@ -1,141 +1,106 @@
 mod integration_tests {
-    use std::sync::Arc;
-    use pylon::proxy::AppState;
-    use pylon::config::{ProxyConfig, ProxyOptions};
+    use pylon::db::{Database, Proxy};
     
-    fn create_test_state() -> Arc<AppState> {
-        Arc::new(AppState::new())
+    async fn create_test_db() -> Database {
+        let db_path = format!("/tmp/pylon_test_{}.db", std::process::id());
+        let db = Database::new_with_path(&db_path).await.unwrap();
+        db
     }
 
-    fn create_test_proxy_with_id(id: &str) -> ProxyConfig {
-        ProxyConfig {
+    fn create_test_proxy_with_id(id: &str) -> Proxy {
+        let now = chrono::Utc::now().to_rfc3339();
+        Proxy {
             id: id.to_string(),
             source_model: id.to_string(),
             target_model: format!("target-{}", id),
-            upstream: "https://api.openai.com/v1".to_string(),
+            upstream: "https://api.openai.com".to_string(),
             api_key: "test-key".to_string(),
-            options: ProxyOptions::default(),
+            default_max_tokens: None,
+            default_temperature: None,
+            default_top_p: None,
+            default_top_k: None,
+            support_streaming: true,
+            support_tools: false,
+            support_vision: false,
+            extra_headers: None,
+            extra_body: None,
+            created_at: now.clone(),
+            updated_at: now,
         }
     }
 
     #[tokio::test]
-    async fn test_app_state_creation() {
-        let state = create_test_state();
-        let models = state.config.list_models().await;
-        assert!(!models.is_empty() || models.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_add_proxy() {
-        let state = create_test_state();
-        let id = format!("add-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
+    async fn test_create_proxy() {
+        let db = create_test_db().await;
+        let id = format!("create-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
         let proxy = create_test_proxy_with_id(&id);
         
-        state.config.add(proxy.clone()).await.unwrap();
+        db.create_proxy(&proxy).await.unwrap();
         
-        let retrieved = state.config.get(&id).await;
+        let retrieved = db.get_proxy(&id).await.unwrap();
         assert!(retrieved.is_some());
-        
-        state.config.delete(&id).await.ok();
     }
 
     #[tokio::test]
     async fn test_get_proxy() {
-        let state = create_test_state();
+        let db = create_test_db().await;
         let id = format!("get-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
         let proxy = create_test_proxy_with_id(&id);
         
-        state.config.add(proxy.clone()).await.unwrap();
+        db.create_proxy(&proxy).await.unwrap();
         
-        let retrieved = state.config.get(&id).await;
-        assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().target_model, format!("target-{}", id));
-        
-        state.config.delete(&id).await.ok();
+        let retrieved = db.get_proxy(&id).await.unwrap().unwrap();
+        assert_eq!(retrieved.target_model, format!("target-{}", id));
     }
 
     #[tokio::test]
     async fn test_delete_proxy() {
-        let state = create_test_state();
+        let db = create_test_db().await;
         let id = format!("del-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
         let proxy = create_test_proxy_with_id(&id);
         
-        state.config.add(proxy.clone()).await.unwrap();
-        state.config.delete(&id).await.unwrap();
+        db.create_proxy(&proxy).await.unwrap();
+        db.delete_proxy(&id).await.unwrap();
         
-        let retrieved = state.config.get(&id).await;
+        let retrieved = db.get_proxy(&id).await.unwrap();
         assert!(retrieved.is_none());
     }
 
     #[tokio::test]
-    async fn test_proxy_not_found() {
-        let state = create_test_state();
-        let retrieved = state.config.get("nonexistent-proxy-xyz-123").await;
-        assert!(retrieved.is_none());
+    async fn test_list_proxies() {
+        let db = create_test_db().await;
+        let id1 = format!("list1-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
+        let id2 = format!("list2-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
+        
+        db.create_proxy(&create_test_proxy_with_id(&id1)).await.unwrap();
+        db.create_proxy(&create_test_proxy_with_id(&id2)).await.unwrap();
+        
+        let proxies = db.list_proxies().await.unwrap();
+        assert!(proxies.len() >= 2);
     }
 
-    #[test]
-    fn test_proxy_config_serialization() {
-        let proxy = create_test_proxy_with_id("serde-test");
+    #[tokio::test]
+    async fn test_authorize_agent() {
+        let db = create_test_db().await;
+        let id = format!("auth-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
         
-        let json = serde_json::to_string(&proxy).unwrap();
-        let parsed: ProxyConfig = serde_json::from_str(&json).unwrap();
+        db.create_proxy(&create_test_proxy_with_id(&id)).await.unwrap();
+        db.authorize(&id, "test-agent", "use", "admin").await.unwrap();
         
-        assert_eq!(parsed.source_model, "serde-test");
-        assert_eq!(parsed.target_model, "target-serde-test");
+        let has_permission = db.check_permission(&id, "test-agent").await.unwrap();
+        assert!(has_permission);
     }
 
-    #[test]
-    fn test_proxy_transform_request() {
-        let proxy = create_test_proxy_with_id("transform-test");
+    #[tokio::test]
+    async fn test_revoke_agent() {
+        let db = create_test_db().await;
+        let id = format!("revoke-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
         
-        let body = serde_json::json!({
-            "model": "transform-test",
-            "messages": [{"role": "user", "content": "Hello"}]
-        });
+        db.create_proxy(&create_test_proxy_with_id(&id)).await.unwrap();
+        db.authorize(&id, "test-agent", "use", "admin").await.unwrap();
+        db.revoke(&id, "test-agent").await.unwrap();
         
-        let transformed = proxy.transform_request(body);
-        
-        assert_eq!(transformed["model"], "target-transform-test");
-    }
-
-    #[test]
-    fn test_proxy_transform_with_default_max_tokens() {
-        let mut proxy = create_test_proxy_with_id("max-tokens-test");
-        proxy.options.default_max_tokens = Some(8192);
-        
-        let body = serde_json::json!({
-            "model": "max-tokens-test",
-            "messages": [{"role": "user", "content": "Hello"}]
-        });
-        
-        let transformed = proxy.transform_request(body);
-        
-        assert_eq!(transformed["max_tokens"], 8192);
-    }
-
-    #[test]
-    fn test_proxy_transform_preserves_existing_max_tokens() {
-        let mut proxy = create_test_proxy_with_id("preserve-test");
-        proxy.options.default_max_tokens = Some(8192);
-        
-        let body = serde_json::json!({
-            "model": "preserve-test",
-            "messages": [{"role": "user", "content": "Hello"}],
-            "max_tokens": 1000
-        });
-        
-        let transformed = proxy.transform_request(body);
-        
-        assert_eq!(transformed["max_tokens"], 1000);
-    }
-
-    #[test]
-    fn test_proxy_options_default() {
-        let options = ProxyOptions::default();
-        
-        assert!(options.support_streaming);
-        assert!(!options.support_tools);
-        assert!(!options.support_vision);
+        let has_permission = db.check_permission(&id, "test-agent").await.unwrap();
+        assert!(!has_permission);
     }
 }

@@ -1,0 +1,168 @@
+{% extends "layout.html" %}
+
+{% block title %}{% if proxy.is_some() %}Edit Proxy{% else %}New Proxy{% endif %} - Pylon{% endblock %}
+
+{% block content %}
+<h1>{% if proxy.is_some() %}Edit Proxy{% else %}New Proxy{% endif %}</h1>
+
+<div class="card">
+    <form method="POST" action="/ui/proxies{% if let Some(p) = proxy %}/{{ p.id }}{% endif %}">
+        <div class="form-group">
+            <label for="id">Proxy ID</label>
+            <input type="text" id="id" name="id" required 
+                {% if let Some(p) = proxy %}value="{{ p.id }}" readonly{% endif %}
+                placeholder="e.g., my-gpt-proxy">
+        </div>
+        
+        <div class="form-group">
+            <label for="source_model">Source Model (the model name clients will use)</label>
+            <input type="text" id="source_model" name="source_model" required
+                {% if let Some(p) = proxy %}value="{{ p.source_model }}"{% endif %}
+                placeholder="e.g., gpt-4">
+        </div>
+        
+        <div class="form-group">
+            <label for="target_model">Target Model (the actual upstream model)</label>
+            <input type="text" id="target_model" name="target_model" required
+                {% if let Some(p) = proxy %}value="{{ p.target_model }}"{% endif %}
+                placeholder="e.g., gpt-4-turbo-preview">
+        </div>
+        
+        <div class="form-group">
+            <label for="upstream">Upstream Base URL</label>
+            <input type="text" id="upstream" name="upstream" required
+                {% if let Some(p) = proxy %}value="{{ p.upstream }}"{% endif %}
+                placeholder="e.g., https://api.openai.com">
+        </div>
+        
+        <div class="form-group">
+            <label for="api_key">API Key</label>
+            <input type="password" id="api_key" name="api_key" {% if proxy.is_none() %}required{% endif %}
+                placeholder="Leave blank to keep existing">
+        </div>
+        
+        <h3 style="margin-top: 1.5rem;">Optional Settings</h3>
+        
+        <div class="form-group">
+            <label for="default_max_tokens">Default Max Tokens</label>
+            <input type="number" id="default_max_tokens" name="default_max_tokens"
+                {% if let Some(p) = proxy %}{% if let Some(v) = p.default_max_tokens %}value="{{ v }}"{% endif %}{% endif %}
+                placeholder="e.g., 4096">
+        </div>
+        
+        <div class="form-group">
+            <label for="default_temperature">Default Temperature</label>
+            <input type="number" step="0.1" id="default_temperature" name="default_temperature"
+                {% if let Some(p) = proxy %}{% if let Some(v) = p.default_temperature %}value="{{ v }}"{% endif %}{% endif %}
+                placeholder="e.g., 0.7">
+        </div>
+        
+        <div class="form-group">
+            <label for="default_top_p">Default Top P</label>
+            <input type="number" step="0.1" id="default_top_p" name="default_top_p"
+                {% if let Some(p) = proxy %}{% if let Some(v) = p.default_top_p %}value="{{ v }}"{% endif %}{% endif %}
+                placeholder="e.g., 0.9">
+        </div>
+        
+        <div class="form-group">
+            <label for="default_top_k">Default Top K</label>
+            <input type="number" id="default_top_k" name="default_top_k"
+                {% if let Some(p) = proxy %}{% if let Some(v) = p.default_top_k %}value="{{ v }}"{% endif %}{% endif %}
+                placeholder="e.g., 40">
+        </div>
+        
+        <div class="form-group">
+            <label>Features</label>
+            <div style="display: flex; gap: 1rem;">
+                <label>
+                    <input type="checkbox" name="support_streaming" value="true" 
+                        {% if let Some(p) = proxy %}{% if p.support_streaming %}checked{% endif %}{% else %}checked{% endif %}>
+                    Streaming
+                </label>
+                <label>
+                    <input type="checkbox" name="support_tools" value="true"
+                        {% if let Some(p) = proxy %}{% if p.support_tools %}checked{% endif %}{% endif %}>
+                    Tools
+                </label>
+                <label>
+                    <input type="checkbox" name="support_vision" value="true"
+                        {% if let Some(p) = proxy %}{% if p.support_vision %}checked{% endif %}{% endif %}>
+                    Vision
+                </label>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="extra_headers">Extra Headers (JSON)</label>
+            <textarea id="extra_headers" name="extra_headers" rows="2"
+                placeholder='{"X-Custom-Header": "value"}'>{% if let Some(p) = proxy %}{% if let Some(v) = p.extra_headers %}{{ v }}{% endif %}{% endif %}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="extra_body">Extra Body (JSON)</label>
+            <textarea id="extra_body" name="extra_body" rows="2"
+                placeholder='{"custom_param": "value"}'>{% if let Some(p) = proxy %}{% if let Some(v) = p.extra_body %}{{ v }}{% endif %}{% endif %}</textarea>
+        </div>
+        
+        <div style="margin-top: 1.5rem;">
+            <button type="submit" class="btn btn-primary">Save Proxy</button>
+            <a href="/ui/proxies" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{% if proxy.is_some() %}
+<div class="card">
+    <h2>Permissions</h2>
+    {% if permissions.is_empty() %}
+    <p>No permissions granted yet.</p>
+    {% else %}
+    <table>
+        <thead>
+            <tr>
+                <th>Agent</th>
+                <th>Level</th>
+                <th>Granted By</th>
+                <th>Granted At</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for perm in permissions %}
+            <tr>
+                <td><code>{{ perm.agent_name }}</code></td>
+                <td>{{ perm.permission_level }}</td>
+                <td>{{ perm.granted_by }}</td>
+                <td>{{ perm.granted_at }}</td>
+                <td>
+                    <form method="POST" action="/ui/proxies/{{ perm.proxy_id }}/revoke" style="display: inline;">
+                        <input type="hidden" name="agent_name" value="{{ perm.agent_name }}">
+                        <button type="submit" class="btn btn-danger">Revoke</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    
+    <h3 style="margin-top: 1.5rem;">Grant Permission</h3>
+    <form method="POST" action="/ui/proxies{% if let Some(p) = proxy %}/{{ p.id }}{% endif %}/authorize">
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label for="agent_name">Agent Name</label>
+                <input type="text" id="agent_name" name="agent_name" required placeholder="e.g., cerebrate">
+            </div>
+            <div class="form-group" style="width: 150px; margin-bottom: 0;">
+                <label for="permission_level">Level</label>
+                <select id="permission_level" name="permission_level">
+                    <option value="use">Use</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Grant</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}
