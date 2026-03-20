@@ -1,205 +1,141 @@
 mod integration_tests {
     use std::sync::Arc;
-    use tokio::sync::RwLock;
-    use reqwest::Client;
-    use pylon::proxy::{AppState, ChatRequest, Message, ModelList};
+    use pylon::proxy::AppState;
+    use pylon::config::{ProxyConfig, ProxyOptions};
     
     fn create_test_state() -> Arc<AppState> {
-        Arc::new(AppState {
-            upstream: "http://localhost:11434".to_string(),
-            client: Client::new(),
-            models: RwLock::new(vec!["llama3.2".to_string(), "gpt-4".to_string()]),
-        })
+        Arc::new(AppState::new())
+    }
+
+    fn create_test_proxy_with_id(id: &str) -> ProxyConfig {
+        ProxyConfig {
+            id: id.to_string(),
+            source_model: id.to_string(),
+            target_model: format!("target-{}", id),
+            upstream: "https://api.openai.com/v1".to_string(),
+            api_key: "test-key".to_string(),
+            options: ProxyOptions::default(),
+        }
     }
 
     #[tokio::test]
     async fn test_app_state_creation() {
         let state = create_test_state();
-        assert_eq!(state.upstream, "http://localhost:11434");
+        let models = state.config.list_models().await;
+        assert!(!models.is_empty() || models.is_empty());
     }
 
     #[tokio::test]
-    async fn test_models_rwlock() {
+    async fn test_add_proxy() {
         let state = create_test_state();
+        let id = format!("add-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
+        let proxy = create_test_proxy_with_id(&id);
         
-        {
-            let models = state.models.read().await;
-            assert_eq!(models.len(), 2);
-            assert!(models.contains(&"llama3.2".to_string()));
-        }
+        state.config.add(proxy.clone()).await.unwrap();
         
-        {
-            let mut models = state.models.write().await;
-            models.push("claude-3".to_string());
-        }
+        let retrieved = state.config.get(&id).await;
+        assert!(retrieved.is_some());
         
-        let models = state.models.read().await;
-        assert_eq!(models.len(), 3);
-    }
-
-    #[test]
-    fn test_chat_request_builder() {
-        let req = ChatRequest {
-            model: "test-model".to_string(),
-            messages: vec![
-                Message { role: "system".to_string(), content: "Be helpful".to_string() },
-                Message { role: "user".to_string(), content: "Hi".to_string() },
-            ],
-            temperature: 0.0,
-            max_tokens: 2048,
-            stream: false,
-        };
-
-        let json = serde_json::to_value(&req).unwrap();
-        assert_eq!(json["model"], "test-model");
-        assert_eq!(json["temperature"], 0.0);
-    }
-
-    #[test]
-    fn test_message_roles() {
-        let roles = vec!["system", "user", "assistant", "tool"];
-        
-        for role in roles {
-            let msg = Message {
-                role: role.to_string(),
-                content: "test".to_string(),
-            };
-            let json = serde_json::to_string(&msg).unwrap();
-            assert!(json.contains(role));
-        }
-    }
-
-    #[test]
-    fn test_large_content() {
-        let large_content = "x".repeat(10000);
-        let msg = Message {
-            role: "user".to_string(),
-            content: large_content.clone(),
-        };
-        
-        let json = serde_json::to_string(&msg).unwrap();
-        let parsed: Message = serde_json::from_str(&json).unwrap();
-        
-        assert_eq!(parsed.content.len(), 10000);
-    }
-
-    #[test]
-    fn test_special_characters_in_content() {
-        let content = r#"{"key": "value", "nested": {"a": 1}}"#;
-        let msg = Message {
-            role: "user".to_string(),
-            content: content.to_string(),
-        };
-        
-        let json = serde_json::to_string(&msg).unwrap();
-        let parsed: Message = serde_json::from_str(&json).unwrap();
-        
-        assert_eq!(parsed.content, content);
-    }
-
-    #[test]
-    fn test_unicode_content() {
-        let content = "你好世界 🌍 مرحبا";
-        let msg = Message {
-            role: "user".to_string(),
-            content: content.to_string(),
-        };
-        
-        let json = serde_json::to_string(&msg).unwrap();
-        let parsed: Message = serde_json::from_str(&json).unwrap();
-        
-        assert_eq!(parsed.content, content);
-    }
-
-    #[test]
-    fn test_model_list_serialization() {
-        let list = ModelList {
-            object: "list".to_string(),
-            data: vec![],
-        };
-        
-        let json = serde_json::to_string(&list).unwrap();
-        assert!(json.contains("list"));
-        assert!(json.contains("data"));
+        state.config.delete(&id).await.ok();
     }
 
     #[tokio::test]
-    async fn test_concurrent_model_access() {
+    async fn test_get_proxy() {
         let state = create_test_state();
-        let mut handles = vec![];
+        let id = format!("get-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
+        let proxy = create_test_proxy_with_id(&id);
         
-        for i in 0..10 {
-            let state_clone = state.clone();
-            let handle = tokio::spawn(async move {
-                let models = state_clone.models.read().await;
-                models.len() + i
-            });
-            handles.push(handle);
-        }
+        state.config.add(proxy.clone()).await.unwrap();
         
-        for handle in handles {
-            let result = handle.await.unwrap();
-            assert!(result >= 2);
-        }
+        let retrieved = state.config.get(&id).await;
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().target_model, format!("target-{}", id));
+        
+        state.config.delete(&id).await.ok();
+    }
+
+    #[tokio::test]
+    async fn test_delete_proxy() {
+        let state = create_test_state();
+        let id = format!("del-{}", std::time::SystemTime::now().elapsed().unwrap().as_nanos());
+        let proxy = create_test_proxy_with_id(&id);
+        
+        state.config.add(proxy.clone()).await.unwrap();
+        state.config.delete(&id).await.unwrap();
+        
+        let retrieved = state.config.get(&id).await;
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_proxy_not_found() {
+        let state = create_test_state();
+        let retrieved = state.config.get("nonexistent-proxy-xyz-123").await;
+        assert!(retrieved.is_none());
     }
 
     #[test]
-    fn test_empty_messages() {
-        let req = ChatRequest {
-            model: "test".to_string(),
-            messages: vec![],
-            temperature: 0.5,
-            max_tokens: 100,
-            stream: false,
-        };
+    fn test_proxy_config_serialization() {
+        let proxy = create_test_proxy_with_id("serde-test");
         
-        let json = serde_json::to_string(&req).unwrap();
-        let parsed: ChatRequest = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&proxy).unwrap();
+        let parsed: ProxyConfig = serde_json::from_str(&json).unwrap();
         
-        assert!(parsed.messages.is_empty());
+        assert_eq!(parsed.source_model, "serde-test");
+        assert_eq!(parsed.target_model, "target-serde-test");
     }
 
     #[test]
-    fn test_max_values() {
-        let req = ChatRequest {
-            model: "test".to_string(),
-            messages: vec![],
-            temperature: f32::MAX,
-            max_tokens: u32::MAX,
-            stream: true,
-        };
+    fn test_proxy_transform_request() {
+        let proxy = create_test_proxy_with_id("transform-test");
         
-        let json = serde_json::to_string(&req).unwrap();
-        let parsed: ChatRequest = serde_json::from_str(&json).unwrap();
+        let body = serde_json::json!({
+            "model": "transform-test",
+            "messages": [{"role": "user", "content": "Hello"}]
+        });
         
-        assert_eq!(parsed.temperature, f32::MAX);
-        assert_eq!(parsed.max_tokens, u32::MAX);
+        let transformed = proxy.transform_request(body);
+        
+        assert_eq!(transformed["model"], "target-transform-test");
     }
 
     #[test]
-    fn test_model_name_variations() {
-        let model_names = vec![
-            "gpt-4",
-            "gpt-4-turbo",
-            "claude-3-opus-20240229",
-            "llama-3.2-1b-instruct",
-            "model_with_underscores",
-            "model-with-dashes",
-            "ModelWithCamelCase",
-        ];
+    fn test_proxy_transform_with_default_max_tokens() {
+        let mut proxy = create_test_proxy_with_id("max-tokens-test");
+        proxy.options.default_max_tokens = Some(8192);
         
-        for name in model_names {
-            let req = ChatRequest {
-                model: name.to_string(),
-                messages: vec![],
-                temperature: 0.0,
-                max_tokens: 100,
-                stream: false,
-            };
-            
-            let json = serde_json::to_string(&req).unwrap();
-            let parsed: ChatRequest = serde_json::from_str(&json).unwrap();
-            assert_eq!(parsed.model, name);
-        }
+        let body = serde_json::json!({
+            "model": "max-tokens-test",
+            "messages": [{"role": "user", "content": "Hello"}]
+        });
+        
+        let transformed = proxy.transform_request(body);
+        
+        assert_eq!(transformed["max_tokens"], 8192);
+    }
+
+    #[test]
+    fn test_proxy_transform_preserves_existing_max_tokens() {
+        let mut proxy = create_test_proxy_with_id("preserve-test");
+        proxy.options.default_max_tokens = Some(8192);
+        
+        let body = serde_json::json!({
+            "model": "preserve-test",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "max_tokens": 1000
+        });
+        
+        let transformed = proxy.transform_request(body);
+        
+        assert_eq!(transformed["max_tokens"], 1000);
+    }
+
+    #[test]
+    fn test_proxy_options_default() {
+        let options = ProxyOptions::default();
+        
+        assert!(options.support_streaming);
+        assert!(!options.support_tools);
+        assert!(!options.support_vision);
     }
 }

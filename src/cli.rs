@@ -15,15 +15,13 @@ pub enum Commands {
     Serve {
         #[arg(short, long, default_value = "8080")]
         port: u16,
-        #[arg(short, long, default_value = "http://localhost:11434")]
-        upstream: String,
     },
 }
 
 pub async fn handle_command(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
-        Commands::Serve { port, upstream } => {
-            crate::proxy::serve(port, &upstream).await?;
+        Commands::Serve { port } => {
+            crate::proxy::serve(port).await?;
         }
     }
     Ok(())
