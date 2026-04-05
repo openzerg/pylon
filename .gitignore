@@ -28,4 +28,6 @@ logs/
 # Environment
 .env
 .env.local
-.env.*.local
+.env.*.local.devenv/
+*.db
+*.sqlite
