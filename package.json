@@ -12,7 +12,7 @@
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.1",
     "@connectrpc/connect-node": "^2.1.1",
-    "@openzerg/common": "github:openzerg/common#ts",
+    "@openzerg/common": "github:openzerg/common#typescript",
     "ai": "^6.0.146",
     "drizzle-orm": "^0.45.2"
   },
