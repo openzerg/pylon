@@ -1,15 +1,14 @@
-FROM nixos/nix:latest
+FROM docker.io/oven/bun:1-alpine
 
 WORKDIR /app
 
-RUN nix-env -iA nixpkgs.bun nixpkgs.sqlite nixpkgs.bash nixpkgs.coreutils nixpkgs.cacert nixpkgs.curl
+RUN apk add --no-cache sqlite bash coreutils ca-certificates curl
 
-ENV SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
-ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-bundle.crt
-ENV NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 COPY package.json bun.lock* ./
-RUN SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-bundle.crt bun install
+RUN bun install --frozen-lockfile
 
 COPY src/ src/
 COPY tsconfig.json ./
