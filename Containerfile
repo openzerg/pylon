@@ -1,6 +1,6 @@
-FROM docker.io/oven/bun:alpine AS builder
+FROM docker.io/oven/bun:latest AS builder
 
-RUN apk add --no-cache git
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -10,12 +10,11 @@ RUN bun install
 COPY src/ src/
 COPY tsconfig.json ./
 
-FROM docker.io/library/alpine:3.23
-
-RUN apk add --no-cache ca-certificates sqlite-libs bash
+FROM docker.io/library/busybox:glibc
 
 WORKDIR /app
 
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/src ./src
