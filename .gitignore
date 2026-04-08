@@ -32,3 +32,5 @@ logs/
 *.db
 *.sqlite
 pylon
+result
+result-*
