@@ -1,5 +1,7 @@
 FROM docker.io/oven/bun:alpine AS builder
 
+RUN apk add --no-cache git
+
 WORKDIR /app
 
 COPY package.json bun.lock* ./
