@@ -1,14 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 mkdir -p /root
 
-# ── Nix setup ────────────────────────────────────────────────────────────────
-if [ -d /nix/store ]; then
-    NIX_PKG=$(ls /nix/store | grep -E '^[a-z0-9]+-bun-[0-9]+\.[0-9]+\.[0-9]+$' | sort | tail -1)
-    if [ -n "$NIX_PKG" ]; then
-        export PATH="/nix/store/${NIX_PKG}/bin:${PATH}"
-    fi
+export NIX_REMOTE=daemon
+export NIX_CONFIG="experimental-features = nix-command flakes"
+export XDG_CACHE_HOME=/nix-cache
+
+NIX_BIN=$(ls -d /nix/store/*-nix-2.* 2>/dev/null | grep -v '\.drv$' | grep -v '\.patch$' | head -1)
+if [ -n "$NIX_BIN" ]; then
+    export PATH="${NIX_BIN}/bin:${PATH}"
 fi
+
+NIXPKGS="github:NixOS/nixpkgs/nixos-25.11"
+
+export PATH="$($NIX_BIN/bin/nix path-info ${NIXPKGS}#bun)/bin:${PATH}"
 
 exec "$@"
