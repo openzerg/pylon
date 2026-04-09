@@ -81,49 +81,58 @@ server.listen(cfg.port, cfg.host, () => {
 if (cfg.cerebrateURL && cfg.adminToken) {
   const cc = new CerebrateClient({ baseURL: cfg.cerebrateURL });
   let registeredInstanceId: string | null = null;
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-  const registerAndHeartbeat = async () => {
+  const doRegister = async () => {
     await cc.login(cfg.adminToken);
 
-    // Use host IP (192.168.200.1) so agent containers can reach pylon
     const hostIP = process.env.PYLON_HOST_IP ?? "192.168.200.1";
     const publicURL = cfg.publicURL || `http://${hostIP}:${cfg.port}`;
 
-    // Check if already registered by name to avoid duplicates on restart
-    const { instances } = await cc.listInstances({});
-    const existing = instances.find(
-      i => i.instanceType === "pylon" && i.name === "pylon"
-    );
-    if (existing) {
-      console.log(`[pylon] already registered with cerebrate (${existing.instanceId})`);
-      registeredInstanceId = existing.instanceId;
-    } else {
-      const inst = await cc.registerInstance({
-        name: "pylon",
-        instanceType: "pylon",
-        ip: hostIP,
-        port: cfg.port,
-        status: "running",
-        labels: { public_url: publicURL },
-      });
-      registeredInstanceId = inst.instanceId;
-      console.log(`[pylon] registered with cerebrate (${registeredInstanceId})`);
-    }
+    const inst = await cc.registerInstance({
+      name: "pylon",
+      instanceType: "pylon",
+      ip: hostIP,
+      port: cfg.port,
+      status: "running",
+      labels: { public_url: publicURL },
+    });
+    registeredInstanceId = inst.instanceId;
+    console.log(`[pylon] registered with cerebrate (${registeredInstanceId})`);
+  };
 
-    // Send heartbeat every 30 seconds
-    setInterval(async () => {
+  const startHeartbeat = () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(async () => {
       if (!registeredInstanceId) return;
       try {
         await cc.heartbeat(registeredInstanceId);
       } catch (e) {
-        console.error("[pylon] heartbeat failed:", e);
-        // Try to re-login on next heartbeat
-        try { await cc.login(cfg.adminToken); } catch {}
+        console.error("[pylon] heartbeat failed, re-registering:", e);
+        clearInterval(heartbeatTimer!);
+        heartbeatTimer = null;
+        try {
+          await doRegister();
+          startHeartbeat();
+        } catch (err) {
+          console.error("[pylon] re-register failed:", err);
+        }
       }
     }, 30_000);
   };
 
-  registerAndHeartbeat().catch(e => console.error("[pylon] cerebrate register failed:", e));
+  doRegister().then(() => startHeartbeat()).catch(e => {
+    console.error("[pylon] initial cerebrate register failed:", e);
+    const retryInterval = setInterval(async () => {
+      try {
+        await doRegister();
+        startHeartbeat();
+        clearInterval(retryInterval);
+      } catch {
+        console.error("[pylon] cerebrate register retry failed");
+      }
+    }, 10_000);
+  });
 }
 
 process.on("SIGINT", () => { server.close(); process.exit(0); });
