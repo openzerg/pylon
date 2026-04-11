@@ -1,6 +1,8 @@
-FROM docker.io/oven/bun:latest AS builder
+FROM docker.io/nixos/nix:latest AS builder
 
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+RUN nix --extra-experimental-features "nix-command flakes" --option substituters "https://mirrors.ustc.edu.cn/nix-channels/store https://cache.nixos.org/" --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=" profile install github:NixOS/nixpkgs/nixos-25.11#bun
+
+ENV PATH=/nix/profiles/default/bin:${PATH}
 
 WORKDIR /app
 
@@ -10,11 +12,10 @@ RUN bun install
 COPY src/ src/
 COPY tsconfig.json ./
 
-FROM docker.io/library/busybox:glibc
+FROM docker.io/library/debian:trixie-slim
 
 WORKDIR /app
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/src ./src
@@ -22,8 +23,6 @@ COPY --from=builder /app/tsconfig.json ./
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 ENV PYLON_PORT=15316
 ENV PYLON_DB=/tmp/pylon.db
 

@@ -160,9 +160,9 @@ export function createChatService(db: DB) {
       const model = body.model as string;
       if (!model) return new Response(JSON.stringify({ error: "model required" }), { status: 400 });
 
-      // Auth: Bearer token = agent_name
       const authHeader = req.headers.get("Authorization") ?? "";
       const agentName = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      if (!agentName) return new Response(JSON.stringify({ error: { message: "authorization required", type: "authentication_error" } }), { status: 401, headers: { "Content-Type": "application/json" } });
 
       // Find proxy by source_model
       const { proxies } = await import("../db/schema.js");
@@ -171,12 +171,10 @@ export function createChatService(db: DB) {
       const proxy = rows[0];
       if (!proxy) return new Response(JSON.stringify({ error: { message: `no proxy for model: ${model}`, type: "invalid_request_error" } }), { status: 404, headers: { "Content-Type": "application/json" } });
 
-      // Check permission if agent_name present
-      if (agentName) {
-        const { permissions } = await import("../db/schema.js");
-        const perm = await db.select().from(permissions).where(and(eq(permissions.proxyId, proxy.id), eq(permissions.agentName, agentName)));
-        if (perm.length === 0) return new Response(JSON.stringify({ error: { message: "permission denied", type: "permission_error" } }), { status: 403, headers: { "Content-Type": "application/json" } });
-      }
+      // Check permission (always required)
+      const { permissions } = await import("../db/schema.js");
+      const perm = await db.select().from(permissions).where(and(eq(permissions.proxyId, proxy.id), eq(permissions.agentName, agentName)));
+      if (perm.length === 0) return new Response(JSON.stringify({ error: { message: "permission denied", type: "permission_error" } }), { status: 403, headers: { "Content-Type": "application/json" } });
 
       // Forward to upstream with target model
       const forwarded = { ...body, model: proxy.targetModel };
