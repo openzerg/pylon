@@ -6,6 +6,7 @@ import { openDB } from "./db/index.js";
 import { createRouter } from "./api/server.js";
 import { createChatService } from "./service/chat.js";
 import { CerebrateClient } from "@openzerg/common";
+import { createNodeTransport } from "@openzerg/common/node";
 
 const cfg = loadConfig();
 const db = openDB(cfg.dbPath);
@@ -79,7 +80,7 @@ server.listen(cfg.port, cfg.host, () => {
 
 // Register with Cerebrate and send periodic heartbeats
 if (cfg.cerebrateURL && cfg.adminToken) {
-  const cc = new CerebrateClient({ baseURL: cfg.cerebrateURL });
+  const cc = new CerebrateClient({ baseURL: cfg.cerebrateURL, transport: createNodeTransport });
   let registeredInstanceId: string | null = null;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
