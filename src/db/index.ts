@@ -24,6 +24,8 @@ export function openDB(path: string) {
       support_vision    INTEGER NOT NULL DEFAULT 0,
       support_reasoning INTEGER NOT NULL DEFAULT 0,
       default_max_tokens INTEGER NOT NULL DEFAULT 4096,
+      context_length    INTEGER NOT NULL DEFAULT 0,
+      auto_compact_length INTEGER NOT NULL DEFAULT 0,
       enabled           INTEGER NOT NULL DEFAULT 1,
       created_at        INTEGER NOT NULL,
       updated_at        INTEGER NOT NULL

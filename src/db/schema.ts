@@ -11,6 +11,8 @@ export const proxies = sqliteTable("proxies", {
   supportVision:   integer("support_vision",   { mode: "boolean" }).notNull().default(false),
   supportReasoning: integer("support_reasoning", { mode: "boolean" }).notNull().default(false),
   defaultMaxTokens: integer("default_max_tokens").notNull().default(4096),
+  contextLength:    integer("context_length").notNull().default(0),
+  autoCompactLength: integer("auto_compact_length").notNull().default(0),
   enabled:         integer("enabled", { mode: "boolean" }).notNull().default(true),
   createdAt:       integer("created_at").notNull(),
   updatedAt:       integer("updated_at").notNull(),

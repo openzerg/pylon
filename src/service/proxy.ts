@@ -20,6 +20,8 @@ function toProto(row: typeof proxies.$inferSelect): ProxyInfo {
     supportVision:    row.supportVision,
     supportReasoning: row.supportReasoning,
     defaultMaxTokens: row.defaultMaxTokens,
+    contextLength:    row.contextLength,
+    autoCompactLength: row.autoCompactLength,
     enabled:          row.enabled,
     createdAt:        BigInt(row.createdAt),
     updatedAt:        BigInt(row.updatedAt),
@@ -48,6 +50,8 @@ export function createProxyService(db: DB) {
     async create(req: CreateProxyRequest): Promise<ProxyInfo> {
       const id = randomId();
       const now = Math.floor(Date.now() / 1000);
+      const contextLength = req.contextLength || 0;
+      const autoCompactLength = req.autoCompactLength || Math.floor(contextLength * 0.9);
       await db.insert(proxies).values({
         id,
         sourceModel:      req.sourceModel,
@@ -59,6 +63,8 @@ export function createProxyService(db: DB) {
         supportVision:    req.supportVision,
         supportReasoning: req.supportReasoning,
         defaultMaxTokens: req.defaultMaxTokens || 4096,
+        contextLength,
+        autoCompactLength,
         enabled:          true,
         createdAt:        now,
         updatedAt:        now,
@@ -68,6 +74,8 @@ export function createProxyService(db: DB) {
 
     async update(req: UpdateProxyRequest): Promise<ProxyInfo | null> {
       const now = Math.floor(Date.now() / 1000);
+      const contextLength = req.contextLength || 0;
+      const autoCompactLength = req.autoCompactLength || Math.floor(contextLength * 0.9);
       await db.update(proxies).set({
         targetModel:      req.targetModel,
         upstream:         req.upstream,
@@ -77,6 +85,8 @@ export function createProxyService(db: DB) {
         supportVision:    req.supportVision,
         supportReasoning: req.supportReasoning,
         defaultMaxTokens: req.defaultMaxTokens || 4096,
+        contextLength,
+        autoCompactLength,
         enabled:          req.enabled,
         updatedAt:        now,
       }).where(eq(proxies.id, req.id));
