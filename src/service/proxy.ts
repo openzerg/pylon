@@ -74,22 +74,27 @@ export function createProxyService(db: DB) {
 
     async update(req: UpdateProxyRequest): Promise<ProxyInfo | null> {
       const now = Math.floor(Date.now() / 1000);
-      const contextLength = req.contextLength || 0;
-      const autoCompactLength = req.autoCompactLength || Math.floor(contextLength * 0.9);
-      await db.update(proxies).set({
-        targetModel:      req.targetModel,
-        upstream:         req.upstream,
-        apiKey:           req.apiKey,
-        supportStreaming: req.supportStreaming,
-        supportTools:     req.supportTools,
-        supportVision:    req.supportVision,
-        supportReasoning: req.supportReasoning,
-        defaultMaxTokens: req.defaultMaxTokens || 4096,
-        contextLength,
-        autoCompactLength,
-        enabled:          req.enabled,
-        updatedAt:        now,
-      }).where(eq(proxies.id, req.id));
+      const existing = await this.get(req.id);
+      if (!existing) return null;
+
+      const updates: Record<string, unknown> = { updatedAt: now };
+
+      if (req.targetModel) updates.targetModel = req.targetModel;
+      if (req.upstream) updates.upstream = req.upstream;
+      if (req.apiKey) updates.apiKey = req.apiKey;
+      if (req.supportStreaming !== existing.supportStreaming) updates.supportStreaming = req.supportStreaming;
+      if (req.supportTools !== existing.supportTools) updates.supportTools = req.supportTools;
+      if (req.supportVision !== existing.supportVision) updates.supportVision = req.supportVision;
+      if (req.supportReasoning !== existing.supportReasoning) updates.supportReasoning = req.supportReasoning;
+      if (req.defaultMaxTokens && req.defaultMaxTokens !== existing.defaultMaxTokens) updates.defaultMaxTokens = req.defaultMaxTokens;
+      if (req.contextLength && req.contextLength !== existing.contextLength) {
+        updates.contextLength = req.contextLength;
+        updates.autoCompactLength = req.autoCompactLength || Math.floor(req.contextLength * 0.9);
+      }
+      if (req.autoCompactLength && req.autoCompactLength !== existing.autoCompactLength) updates.autoCompactLength = req.autoCompactLength;
+      if (req.enabled !== existing.enabled) updates.enabled = req.enabled;
+
+      await db.update(proxies).set(updates).where(eq(proxies.id, req.id));
       return await this.get(req.id);
     },
 
